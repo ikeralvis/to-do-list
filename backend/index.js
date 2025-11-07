@@ -1,9 +1,21 @@
-// server.js corregido
+// index.js corregido
 const express = require('express');
 const db = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const app = express();
+const cors = require('cors');
+
+// Configuración CORS más permisiva para desarrollo
+app.use(cors({
+  origin: true, // Permite cualquier origen (equivalente a '*')
+  credentials: true, // Permite cookies y auth headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Manejar preflight OPTIONS requests
+app.options('*', cors());
 
 app.use(express.json());
 
@@ -11,19 +23,26 @@ app.use(express.json());
 const vulnerableAuth = (req, res, next) => {
   const token = req.headers.authorization;
   
+  console.log('🔐 Auth Middleware - Headers:', req.headers);
+  console.log('🔐 Token received:', token);
+  
   if (!token) {
+    console.log('❌ No token provided');
     return res.status(401).json({ error: 'No token provided' });
   }
 
   try {
     // Vulnerabilidad: No verificar la firma del JWT
     const decoded = jwt.decode(token);
+    console.log('🔓 Token decoded:', decoded);
     req.user = decoded;
     next();
   } catch (error) {
+    console.log('❌ Token decode error:', error);
     res.status(401).json({ error: 'Invalid token' });
   }
 };
+
 
 // ROUTE: Registro de usuario vulnerable
 app.post('/api/register', (req, res) => {
@@ -134,6 +153,14 @@ app.get('/api/users/:id', vulnerableAuth, (req, res) => {
     if (err) return res.status(500).json({ error: 'db error' });
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
+  });
+});
+
+// Agrega esta ruta temporal para debug
+app.get('/api/debug/users', (req, res) => {
+  db.all('SELECT * FROM users', (err, rows) => {
+    if (err) return res.status(500).json({ error: 'db error' });
+    res.json(rows);
   });
 });
 

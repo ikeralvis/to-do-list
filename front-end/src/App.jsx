@@ -1,4 +1,3 @@
-// App.js - 
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
@@ -14,6 +13,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('todos');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
@@ -22,13 +22,14 @@ function App() {
       setIsLoggedIn(true);
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       setUser(userData);
-      fetchTodos();
+      fetchTodos(savedToken); // Pasar el token aquí
     }
   }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     try {
       const response = await fetch('http://localhost:3001/api/login', {
         method: 'POST',
@@ -41,59 +42,56 @@ function App() {
       const data = await response.json();
       
       if (response.ok) {
+        console.log('✅ Login successful, token:', data.token);
         setToken(data.token);
         setUser(data.user);
         setIsLoggedIn(true);
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-        fetchTodos();
+        await fetchTodos(data.token); // Pasar el nuevo token
       } else {
-        alert('Login failed: ' + data.error);
+        setError('Login failed: ' + data.error);
       }
     } catch (error) {
-      alert('Error: ' + error.message);
+      setError('Error: ' + error.message);
     }
     setLoading(false);
   };
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
+  // CORREGIDO: Aceptar token como parámetro
+  const fetchTodos = async (authToken = token) => {
     setLoading(true);
+    setError('');
     try {
-      const response = await fetch('http://localhost:3001/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(registerForm),
-      });
+      console.log('🔐 Fetching todos with token:', authToken);
       
-      const data = await response.json();
-      
-      if (response.ok) {
-        alert('User registered successfully! Please login.');
-        setRegisterForm({ username: '', password: '' });
-      } else {
-        alert('Registration failed: ' + data.error);
-      }
-    } catch (error) {
-      alert('Error: ' + error.message);
-    }
-    setLoading(false);
-  };
-
-  const fetchTodos = async () => {
-    setLoading(true);
-    try {
       const response = await fetch('http://localhost:3001/api/todos', {
         headers: {
-          'Authorization': token,
+          'Authorization': `Bearer ${authToken}`, // CORREGIDO: Agregar 'Bearer '
         },
       });
+      
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
-      setTodos(data);
+      console.log('📦 Todos data received:', data);
+      
+      // Asegurar que data sea un array
+      if (Array.isArray(data)) {
+        setTodos(data);
+      } else {
+        console.error('Expected array but got:', data);
+        setTodos([]);
+        setError('Unexpected response format from server');
+      }
     } catch (error) {
-      alert('Error fetching todos: ' + error.message);
+      console.error('❌ Error fetching todos:', error);
+      setError('Error fetching todos: ' + error.message);
+      setTodos([]);
     }
     setLoading(false);
   };
@@ -101,12 +99,13 @@ function App() {
   const addTodo = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     try {
       const response = await fetch('http://localhost:3001/api/todos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': token,
+          'Authorization': `Bearer ${token}`, // CORREGIDO: Agregar 'Bearer '
         },
         body: JSON.stringify(todoForm),
       });
@@ -115,13 +114,13 @@ function App() {
       
       if (response.ok) {
         setTodoForm({ title: '', description: '', owner: '' });
-        fetchTodos();
+        await fetchTodos();
         alert('Todo added successfully!');
       } else {
-        alert('Error adding todo: ' + data.error);
+        setError('Error adding todo: ' + data.error);
       }
     } catch (error) {
-      alert('Error: ' + error.message);
+      setError('Error: ' + error.message);
     }
     setLoading(false);
   };
@@ -129,17 +128,30 @@ function App() {
   const searchTodos = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     try {
-      const response = await fetch(`http://localhost:3001/api/search?q=${searchTerm}`, {
+      const response = await fetch(`http://localhost:3001/api/search?q=${encodeURIComponent(searchTerm)}`, {
         headers: {
-          'Authorization': token,
+          'Authorization': `Bearer ${token}`, // CORREGIDO: Agregar 'Bearer '
         },
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
-      setSearchResults(data);
-      setActiveTab('search');
+      
+      if (Array.isArray(data)) {
+        setSearchResults(data);
+        setActiveTab('search');
+      } else {
+        setSearchResults([]);
+        setError('Unexpected response format from server');
+      }
     } catch (error) {
-      alert('Error searching: ' + error.message);
+      setError('Error searching: ' + error.message);
+      setSearchResults([]);
     }
     setLoading(false);
   };
@@ -148,27 +160,28 @@ function App() {
     if (!window.confirm('Are you sure you want to delete this todo?')) return;
     
     setLoading(true);
+    setError('');
     try {
       const response = await fetch(`http://localhost:3001/api/todos/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': token,
+          'Authorization': `Bearer ${token}`, // CORREGIDO: Agregar 'Bearer '
         },
       });
       
       const data = await response.json();
       
       if (response.ok) {
-        fetchTodos();
+        await fetchTodos();
         if (activeTab === 'search') {
           setSearchResults(searchResults.filter(todo => todo.id !== id));
         }
         alert('Todo deleted successfully!');
       } else {
-        alert('Error deleting todo: ' + data.error);
+        setError('Error deleting todo: ' + data.error);
       }
     } catch (error) {
-      alert('Error: ' + error.message);
+      setError('Error: ' + error.message);
     }
     setLoading(false);
   };
@@ -184,8 +197,14 @@ function App() {
     setUser(null);
     setTodos([]);
     setSearchResults([]);
+    setError('');
   };
 
+  // CORREGIDO: Asegurar que todos siempre sea un array antes de usar .map()
+  const safeTodos = Array.isArray(todos) ? todos : [];
+  const safeSearchResults = Array.isArray(searchResults) ? searchResults : [];
+
+  // ... (el resto del código de renderizado permanece igual)
   if (!isLoggedIn) {
     return (
       <div className="app">
@@ -195,6 +214,8 @@ function App() {
               <h1>🚀 SecureTodo</h1>
               <p>Manage your tasks securely</p>
             </div>
+
+            {error && <div className="error-message">{error}</div>}
 
             <div className="auth-tabs">
               <div className="tab active">Login</div>
@@ -228,8 +249,10 @@ function App() {
               </button>
             </form>
 
-            <div className="auth-footer">
-              <p>Don't have an account? <span className="link" onClick={() => setActiveTab('register')}>Register here</span></p>
+            <div className="demo-credentials">
+              <h4>💡 Demo Credentials:</h4>
+              <p><strong>SQL Injection:</strong> <code>' OR '1'='1' --</code> / anypassword</p>
+              <p><strong>Normal user:</strong> test / password123</p>
             </div>
           </div>
 
@@ -311,11 +334,11 @@ function App() {
             <h3>Quick Stats</h3>
             <div className="stats">
               <div className="stat-item">
-                <span className="stat-number">{todos.length}</span>
+                <span className="stat-number">{safeTodos.length}</span>
                 <span className="stat-label">Total Todos</span>
               </div>
               <div className="stat-item">
-                <span className="stat-number">{searchResults.length}</span>
+                <span className="stat-number">{safeSearchResults.length}</span>
                 <span className="stat-label">Search Results</span>
               </div>
             </div>
@@ -323,11 +346,13 @@ function App() {
         </div>
 
         <div className="content">
+          {error && <div className="error-message">{error}</div>}
+
           {activeTab === 'todos' && (
             <div className="tab-content">
               <div className="tab-header">
                 <h2>My Todos</h2>
-                <button onClick={fetchTodos} className="btn-refresh" disabled={loading}>
+                <button onClick={() => fetchTodos()} className="btn-refresh" disabled={loading}>
                   🔄 Refresh
                 </button>
               </div>
@@ -336,7 +361,7 @@ function App() {
                 <div className="loading">Loading todos...</div>
               ) : (
                 <div className="todos-grid">
-                  {todos.map(todo => (
+                  {safeTodos.map(todo => (
                     <div key={todo.id} className="todo-card">
                       <div className="todo-header">
                         <h3>{todo.title}</h3>
@@ -361,7 +386,7 @@ function App() {
                     </div>
                   ))}
                   
-                  {todos.length === 0 && (
+                  {safeTodos.length === 0 && (
                     <div className="empty-state">
                       <p>No todos found. Create your first todo!</p>
                     </div>
@@ -433,11 +458,11 @@ function App() {
                 </div>
               </form>
 
-              {searchResults.length > 0 && (
+              {safeSearchResults.length > 0 && (
                 <div className="search-results">
-                  <h3>Search Results ({searchResults.length})</h3>
+                  <h3>Search Results ({safeSearchResults.length})</h3>
                   <div className="todos-grid">
-                    {searchResults.map(todo => (
+                    {safeSearchResults.map(todo => (
                       <div key={todo.id} className="todo-card">
                         <div className="todo-header">
                           <h3>{todo.title}</h3>
@@ -461,7 +486,7 @@ function App() {
                 </div>
               )}
 
-              {searchResults.length === 0 && activeTab === 'search' && (
+              {safeSearchResults.length === 0 && activeTab === 'search' && !loading && (
                 <div className="empty-state">
                   <p>No search results. Try a different search term.</p>
                 </div>
