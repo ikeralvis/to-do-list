@@ -22,7 +22,7 @@ function App() {
       setIsLoggedIn(true);
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       setUser(userData);
-      fetchTodos(savedToken); // Pasar el token aquí
+      fetchTodos(savedToken);
     }
   }, []);
 
@@ -38,9 +38,9 @@ function App() {
         },
         body: JSON.stringify(loginForm),
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
         console.log('✅ Login successful, token:', data.token);
         setToken(data.token);
@@ -48,7 +48,7 @@ function App() {
         setIsLoggedIn(true);
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-        await fetchTodos(data.token); // Pasar el nuevo token
+        await fetchTodos(data.token);
       } else {
         setError('Login failed: ' + data.error);
       }
@@ -58,29 +58,55 @@ function App() {
     setLoading(false);
   };
 
-  // CORREGIDO: Aceptar token como parámetro
+  // 🔥 AÑADIR ESTA FUNCIÓN FALTANTE
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('http://localhost:3001/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registerForm),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert('User registered successfully! Please login.');
+        setRegisterForm({ username: '', password: '' });
+      } else {
+        setError('Registration failed: ' + data.error);
+      }
+    } catch (error) {
+      setError('Error: ' + error.message);
+    }
+    setLoading(false);
+  };
+
   const fetchTodos = async (authToken = token) => {
     setLoading(true);
     setError('');
     try {
       console.log('🔐 Fetching todos with token:', authToken);
-      
+
       const response = await fetch('http://localhost:3001/api/todos', {
         headers: {
-          'Authorization': `Bearer ${authToken}`, // CORREGIDO: Agregar 'Bearer '
+          'Authorization': `Bearer ${authToken}`,
         },
       });
-      
+
       console.log('📡 Response status:', response.status);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log('📦 Todos data received:', data);
-      
-      // Asegurar que data sea un array
+
       if (Array.isArray(data)) {
         setTodos(data);
       } else {
@@ -101,29 +127,53 @@ function App() {
     setLoading(true);
     setError('');
     try {
+      console.log('🔐 Token being used:', token);
+      console.log('📦 Todo data:', todoForm);
+
       const response = await fetch('http://localhost:3001/api/todos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, // CORREGIDO: Agregar 'Bearer '
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(todoForm),
       });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setTodoForm({ title: '', description: '', owner: '' });
-        await fetchTodos();
-        alert('Todo added successfully!');
-      } else {
-        setError('Error adding todo: ' + data.error);
+
+      console.log('📡 Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Server error:', errorData);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error}`);
       }
+
+      const data = await response.json();
+      console.log('✅ Todo created successfully:', data);
+
+      setTodoForm({ title: '', description: '', owner: '' });
+      await fetchTodos();
+      alert('Todo added successfully!');
+
     } catch (error) {
-      setError('Error: ' + error.message);
+      console.error('❌ Error adding todo:', error);
+      setError('Error adding todo: ' + error.message);
     }
     setLoading(false);
   };
+
+  const checkAuthStatus = () => {
+    const savedToken = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+
+    console.log('🔐 Auth Status Check:');
+    console.log('- Token in localStorage:', savedToken);
+    console.log('- User in localStorage:', savedUser);
+    console.log('- React token state:', token);
+    console.log('- React user state:', user);
+    console.log('- Is logged in:', isLoggedIn);
+  };
+
+
 
   const searchTodos = async (e) => {
     e.preventDefault();
@@ -132,16 +182,16 @@ function App() {
     try {
       const response = await fetch(`http://localhost:3001/api/search?q=${encodeURIComponent(searchTerm)}`, {
         headers: {
-          'Authorization': `Bearer ${token}`, // CORREGIDO: Agregar 'Bearer '
+          'Authorization': `Bearer ${token}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (Array.isArray(data)) {
         setSearchResults(data);
         setActiveTab('search');
@@ -158,19 +208,19 @@ function App() {
 
   const deleteTodo = async (id) => {
     if (!window.confirm('Are you sure you want to delete this todo?')) return;
-    
+
     setLoading(true);
     setError('');
     try {
       const response = await fetch(`http://localhost:3001/api/todos/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`, // CORREGIDO: Agregar 'Bearer '
+          'Authorization': `Bearer ${token}`,
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
         await fetchTodos();
         if (activeTab === 'search') {
@@ -200,19 +250,17 @@ function App() {
     setError('');
   };
 
-  // CORREGIDO: Asegurar que todos siempre sea un array antes de usar .map()
   const safeTodos = Array.isArray(todos) ? todos : [];
   const safeSearchResults = Array.isArray(searchResults) ? searchResults : [];
 
-  // ... (el resto del código de renderizado permanece igual)
   if (!isLoggedIn) {
     return (
       <div className="app">
         <div className="auth-container">
           <div className="auth-card">
             <div className="auth-header">
-              <h1>🚀 SecureTodo</h1>
-              <p>Manage your tasks securely</p>
+              <h1>🚀 ToDo App</h1>
+              <p>Manage your tasks</p>
             </div>
 
             {error && <div className="error-message">{error}</div>}
@@ -228,18 +276,18 @@ function App() {
                   type="text"
                   placeholder="Enter your username"
                   value={loginForm.username}
-                  onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
+                  onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
                   required
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>Password</label>
                 <input
                   type="password"
                   placeholder="Enter your password"
                   value={loginForm.password}
-                  onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                   required
                 />
               </div>
@@ -249,11 +297,7 @@ function App() {
               </button>
             </form>
 
-            <div className="demo-credentials">
-              <h4>💡 Demo Credentials:</h4>
-              <p><strong>SQL Injection:</strong> <code>' OR '1'='1' --</code> / anypassword</p>
-              <p><strong>Normal user:</strong> test / password123</p>
-            </div>
+
           </div>
 
           <div className="auth-card">
@@ -268,18 +312,18 @@ function App() {
                   type="text"
                   placeholder="Choose a username"
                   value={registerForm.username}
-                  onChange={(e) => setRegisterForm({...registerForm, username: e.target.value})}
+                  onChange={(e) => setRegisterForm({ ...registerForm, username: e.target.value })}
                   required
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>Password</label>
                 <input
                   type="password"
                   placeholder="Choose a password"
                   value={registerForm.password}
-                  onChange={(e) => setRegisterForm({...registerForm, password: e.target.value})}
+                  onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
                   required
                 />
               </div>
@@ -298,7 +342,7 @@ function App() {
     <div className="app">
       <header className="header">
         <div className="header-content">
-          <h1>📝 SecureTodo</h1>
+          <h1>📝 To Do APP</h1>
           <div className="user-info">
             <span>Welcome, <strong>{user?.username}</strong></span>
             <button onClick={logout} className="btn-logout">Logout</button>
@@ -310,19 +354,19 @@ function App() {
         <div className="sidebar">
           <div className="sidebar-section">
             <h3>Navigation</h3>
-            <button 
+            <button
               className={`nav-btn ${activeTab === 'todos' ? 'active' : ''}`}
               onClick={() => setActiveTab('todos')}
             >
               📋 My Todos
             </button>
-            <button 
+            <button
               className={`nav-btn ${activeTab === 'add' ? 'active' : ''}`}
               onClick={() => setActiveTab('add')}
             >
               ➕ Add Todo
             </button>
-            <button 
+            <button
               className={`nav-btn ${activeTab === 'search' ? 'active' : ''}`}
               onClick={() => setActiveTab('search')}
             >
@@ -356,7 +400,7 @@ function App() {
                   🔄 Refresh
                 </button>
               </div>
-              
+
               {loading ? (
                 <div className="loading">Loading todos...</div>
               ) : (
@@ -365,7 +409,7 @@ function App() {
                     <div key={todo.id} className="todo-card">
                       <div className="todo-header">
                         <h3>{todo.title}</h3>
-                        <button 
+                        <button
                           onClick={() => deleteTodo(todo.id)}
                           className="btn-delete"
                           title="Delete todo"
@@ -373,7 +417,7 @@ function App() {
                           🗑️
                         </button>
                       </div>
-                      <div 
+                      <div
                         className="todo-description"
                         dangerouslySetInnerHTML={renderTodoDescription(todo.description)}
                       />
@@ -385,7 +429,7 @@ function App() {
                       </div>
                     </div>
                   ))}
-                  
+
                   {safeTodos.length === 0 && (
                     <div className="empty-state">
                       <p>No todos found. Create your first todo!</p>
@@ -406,29 +450,29 @@ function App() {
                     type="text"
                     placeholder="Enter todo title"
                     value={todoForm.title}
-                    onChange={(e) => setTodoForm({...todoForm, title: e.target.value})}
+                    onChange={(e) => setTodoForm({ ...todoForm, title: e.target.value })}
                     required
                   />
                 </div>
-                
+
                 <div className="form-group">
                   <label>Description</label>
                   <textarea
                     placeholder="Enter todo description"
                     rows="4"
                     value={todoForm.description}
-                    onChange={(e) => setTodoForm({...todoForm, description: e.target.value})}
+                    onChange={(e) => setTodoForm({ ...todoForm, description: e.target.value })}
                     required
                   />
                 </div>
-                
+
                 <div className="form-group">
                   <label>Owner</label>
                   <input
                     type="text"
                     placeholder="Enter owner name"
                     value={todoForm.owner}
-                    onChange={(e) => setTodoForm({...todoForm, owner: e.target.value})}
+                    onChange={(e) => setTodoForm({ ...todoForm, owner: e.target.value })}
                     required
                   />
                 </div>
@@ -466,14 +510,14 @@ function App() {
                       <div key={todo.id} className="todo-card">
                         <div className="todo-header">
                           <h3>{todo.title}</h3>
-                          <button 
+                          <button
                             onClick={() => deleteTodo(todo.id)}
                             className="btn-delete"
                           >
                             🗑️
                           </button>
                         </div>
-                        <div 
+                        <div
                           className="todo-description"
                           dangerouslySetInnerHTML={renderTodoDescription(todo.description)}
                         />
